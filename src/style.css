@@ -1,110 +1,77 @@
+/* ========================================
+   БАЗОВЫЕ НАСТРОЙКИ
+   ======================================== */
+
+/* Корневые CSS-переменные и настройки шрифтов */
 :root {
+  /* Стек шрифтов: сначала системный, потом запасные */
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  /* Межстрочный интервал */
   line-height: 1.5;
+  /* Толщина шрифта по умолчанию */
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
+  /* Отключаем автогенерацию жирного/курсива браузером */
   font-synthesis: none;
+  /* Улучшенная читаемость текста */
   text-rendering: optimizeLegibility;
+  /* Сглаживание шрифтов для macOS/iOS */
   -webkit-font-smoothing: antialiased;
+  /* Сглаживание шрифтов для Firefox на macOS */
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
+/* ========================================
+   ГЛАВНОЕ: HTML и BODY для полноэкранной игры
+   ======================================== */
 
+html,
 body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-html, body {
+  /* Занимаем всё доступное пространство */
   width: 100%;
   height: 100%;
+  /* Убираем все отступы */
   margin: 0;
   padding: 0;
+  /* Тёмный фон — видно по краям если игра не занимает весь экран */
   background: #111;
-  overflow: hidden;         /* чтобы не скроллило */
-  touch-action: none;       /* важно: не отдавать жесты браузеру */
+  /* ВАЖНО: запрещаем прокрутку страницы */
+  overflow: hidden;
+  /* ВАЖНО: не передаём жесты браузеру (свайпы, зум) */
+  /* Без этого на мобильных тап может вызвать зум или скролл */
+  touch-action: none;
+  /* Запрещаем выделение текста при тапах */
   user-select: none;
+  /* Запрещаем выделение для старых webkit-браузеров */
+  -webkit-user-select: none;
+  /* Убираем синюю подсветку при тапе на Android */
+  -webkit-tap-highlight-color: transparent;
 }
 
+/* ========================================
+   КОНТЕЙНЕР ИГРЫ
+   ======================================== */
+
+/* div#app — сюда Phaser вставляет canvas */
 #app {
+  /* Занимает весь экран */
   width: 100%;
   height: 100%;
+  /* Центрируем canvas внутри */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  /* Не передаём жесты браузеру */
   touch-action: none;
 }
+
+/* ========================================
+   CANVAS (игровое поле)
+   ======================================== */
 
 canvas {
+  /* Не передаём жесты браузеру */
   touch-action: none;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.vanilla:hover {
-  filter: drop-shadow(0 0 2em #f7df1eaa);
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+  /* Блочный элемент — убирает лишний отступ снизу */
+  display: block;
 }
