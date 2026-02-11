@@ -8,9 +8,10 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-fullscreen">
-  
-  <!-- Запрет выделения текста -->
   <meta name="msapplication-tap-highlight" content="no">
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
   
   <title>Flappy Bird</title>
   
@@ -19,20 +20,22 @@
       margin: 0;
       padding: 0;
       box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent; /* Убираем подсветку при тапе */
-      -webkit-touch-callout: none; /* Запрет контекстного меню на iOS */
-      -webkit-user-select: none; /* Запрет выделения текста */
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
       user-select: none;
     }
     
-    body {
+    body, html {
       margin: 0;
       padding: 0;
       overflow: hidden;
       background: #000;
-      position: fixed; /* Запрет скролла страницы */
+      position: fixed;
       width: 100%;
       height: 100%;
+      overscroll-behavior: none;
+      touch-action: none;
     }
     
     #app {
@@ -40,38 +43,18 @@
       height: 100vh;
       overflow: hidden;
     }
-    
-    /* Запрет скролла на мобильных */
-    body, html {
-      overscroll-behavior: none;
-      touch-action: none;
-    }
   </style>
 </head>
 <body>
   <div id="app"></div>
   
+  <!-- Яндекс SDK -->
+  <script src="https://yandex.ru/games/sdk/v2"></script>
+  
   <!-- Phaser из CDN -->
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
   
-  <!-- Моки SDK для разработки -->
-  <script>
-    const isDev = window.location.hostname === 'localhost' || 
-                  window.location.hostname === '127.0.0.1' ||
-                  window.location.port === '5173';
-    
-    if (isDev) {
-      const mockScript = document.createElement('script');
-      mockScript.src = '/ysdk-mock-advanced.js';
-      mockScript.onload = () => {
-        const testScript = document.createElement('script');
-        testScript.src = '/test-scenarios.js';
-        document.head.appendChild(testScript);
-      };
-      document.head.appendChild(mockScript);
-    }
-  </script>
-  
+  <!-- Твоя игра -->
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
