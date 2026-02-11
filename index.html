@@ -1,13 +1,77 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>gameflappybirdproject</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  
+  <!-- Мета-теги для мобильных -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-fullscreen">
+  
+  <!-- Запрет выделения текста -->
+  <meta name="msapplication-tap-highlight" content="no">
+  
+  <title>Flappy Bird</title>
+  
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent; /* Убираем подсветку при тапе */
+      -webkit-touch-callout: none; /* Запрет контекстного меню на iOS */
+      -webkit-user-select: none; /* Запрет выделения текста */
+      user-select: none;
+    }
+    
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+      position: fixed; /* Запрет скролла страницы */
+      width: 100%;
+      height: 100%;
+    }
+    
+    #app {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+    
+    /* Запрет скролла на мобильных */
+    body, html {
+      overscroll-behavior: none;
+      touch-action: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  
+  <!-- Phaser из CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+  
+  <!-- Моки SDK для разработки -->
+  <script>
+    const isDev = window.location.hostname === 'localhost' || 
+                  window.location.hostname === '127.0.0.1' ||
+                  window.location.port === '5173';
+    
+    if (isDev) {
+      const mockScript = document.createElement('script');
+      mockScript.src = '/ysdk-mock-advanced.js';
+      mockScript.onload = () => {
+        const testScript = document.createElement('script');
+        testScript.src = '/test-scenarios.js';
+        document.head.appendChild(testScript);
+      };
+      document.head.appendChild(mockScript);
+    }
+  </script>
+  
+  <script type="module" src="/src/main.js"></script>
+</body>
 </html>

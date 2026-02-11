@@ -1,11 +1,22 @@
-import { defineConfig } from "vite";
+import { defineConfig } from 'vite'
 
 export default defineConfig({
-  test: {
-    exclude: [
-      "**/node_modules/**",
-      "**/dist/**",
-      "**/tests/e2e/**" // <-- исключаем playwright e2e
-    ],
+  build: {
+    rollupOptions: {
+      external: ['phaser'], // Phaser теперь внешний
+    },
+    
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true
+      }
+    }
   },
-});
+  
+  server: {
+    port: 5173,
+    open: true
+  }
+})
