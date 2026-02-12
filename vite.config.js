@@ -5,24 +5,24 @@ export default defineConfig({
   
   build: {
     outDir: 'dist',
-    assetsDir: 'assets',
+    assetsDir: '',  // Пустая строка = всё в корень
+    
+    sourcemap: false,
+    minify: 'esbuild',
     
     rollupOptions: {
-      external: ['phaser']
-    },
-    
-    minify: 'esbuild',
-    sourcemap: false,
-    
-    // Копировать только нужные файлы из public
-    copyPublicDir: true
+      output: {
+        entryFileNames: 'game.js',
+        chunkFileNames: 'game.js',
+        assetFileNames: (assetInfo) => {
+          // Все ассеты в корень БЕЗ хешей
+          return '[name].[ext]';
+        }
+      }
+    }
   },
   
-  // Исключаем моки из копирования
-  publicDir: 'public',
-  
   server: {
-    port: 5173,
-    open: true
+    port: 5173
   }
 })
