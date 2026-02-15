@@ -1,5 +1,14 @@
 import Phaser from "phaser";
-import { initYSDK, showFullscreenAd, submitScore, showBanner, hideBanner, getBannerStatus } from "./ysdk.js";
+import { 
+  initYSDK, 
+  getSDKLanguage,
+  showFullscreenAd, 
+  submitScore, 
+  showBanner, 
+  hideBanner, 
+  getBannerStatus,
+  gameReady        // <-- НОВЫЙ ИМПОРТ
+} from "./ysdk.js";
 import { LanguageScene } from "./LanguageScene.js";
 import { t, setLanguage, getLanguage, loadSavedLanguage } from "./i18n.js";
 
@@ -7,8 +16,61 @@ const WIDTH = 360;
 const HEIGHT = 640;
 const GROUND_H = 80;
 
-// ... остальной код без изменений
+// ========================================
+// === ОТКЛЮЧЕНИЕ ВЫДЕЛЕНИЯ И МЕНЮ      ===
+// ========================================
+const style = document.createElement('style');
+style.textContent = `
+  * {
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    user-select: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+    -webkit-touch-callout: none !important;
+  }
+  
+  canvas, body, html, #app {
+    touch-action: none !important;
+    -ms-touch-action: none !important;
+    overscroll-behavior: none !important;
+  }
 
+  img, a, div, span, p, canvas {
+    -webkit-user-drag: none !important;
+    user-drag: none !important;
+  }
+`;
+document.head.appendChild(style);
+
+// Блокировка всех контекстных меню и выделений
+document.addEventListener('contextmenu', e => e.preventDefault(), { passive: false });
+document.addEventListener('selectstart', e => e.preventDefault(), { passive: false });
+document.addEventListener('dragstart', e => e.preventDefault(), { passive: false });
+
+// Блокировка долгого нажатия на мобильных
+document.addEventListener('touchstart', e => {
+  if (e.touches.length > 1) e.preventDefault();
+}, { passive: false });
+
+document.addEventListener('touchmove', e => {
+  e.preventDefault();
+}, { passive: false });
+
+// Блокировка двойного тапа для зума
+let lastTouchEnd = 0;
+document.addEventListener('touchend', e => {
+  const now = Date.now();
+  if (now - lastTouchEnd <= 300) {
+    e.preventDefault();
+  }
+  lastTouchEnd = now;
+}, { passive: false });
+
+// Блокировка жестов масштабирования
+document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
+document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
+document.addEventListener('gestureend', e => e.preventDefault(), { passive: false });
 
 // ========================================
 // === СЦЕНА ЗАГРУЗКИ                   ===
@@ -25,7 +87,6 @@ class BootScene extends Phaser.Scene {
     progressBox.fillStyle(0x222222, 0.8);
     progressBox.fillRect(WIDTH / 2 - 160, HEIGHT / 2 - 25, 320, 50);
 
-    // ИСПОЛЬЗУЕМ ПЕРЕВОД:
     const loadingText = this.add.text(WIDTH / 2, HEIGHT / 2 - 50, t('loading') + "...", {
       fontFamily: "Arial",
       fontSize: "20px",
@@ -62,6 +123,8 @@ class BootScene extends Phaser.Scene {
   }
 
   create() {
+    // ✅ Game Ready API — вызываем ПОСЛЕ загрузки всех ресурсов
+    gameReady();
     this.scene.start("game");
   }
 }
@@ -84,8 +147,10 @@ class GameScene extends Phaser.Scene {
     this.spawnTimer = null;
     this.lastGapCenter = HEIGHT / 2;
     this.maxGapShift = 120;
+    
+    // ✅ Флаг для предотвращения мгновенного рестарта после рекламы
+    this.adJustClosed = false;
 
-    // Безопасная загрузка рекорда
     this.bestScore = this.loadBestScore();
 
     this.buildingColors = [
@@ -93,13 +158,11 @@ class GameScene extends Phaser.Scene {
       0x9b7653, 0x5f7a8a, 0x8b7d6b, 0x6a5f50,
     ];
 
-    // Счётчик смертей для рекламы
-    if (this.deathCount === undefined) {
-      this.deathCount = 0;
+    if (window.lastAdTime === undefined) {
+      window.lastAdTime = 0;
     }
   }
 
-  // Безопасная работа с localStorage
   loadBestScore() {
     try {
       const saved = localStorage.getItem("flappy-best");
@@ -125,303 +188,310 @@ class GameScene extends Phaser.Scene {
   }
 
   create() {
-  // Кнопка смены языка (в правом верхнем углу)
-  const langButton = this.add.text(WIDTH - 15, 15, "🌍", {
-    fontSize: "24px",
-  }).setOrigin(1, 0).setDepth(100);
+    const langButton = this.add.text(WIDTH - 15, 15, "🌍", {
+      fontSize: "24px",
+    }).setOrigin(1, 0).setDepth(100);
 
-  langButton.setInteractive({ useHandCursor: true });
+    langButton.setInteractive({ useHandCursor: true });
 
-  langButton.on('pointerdown', () => {
-    const langs = ['ru', 'en', 'tr'];
-    const currentIndex = langs.indexOf(getLanguage());
-    const nextLang = langs[(currentIndex + 1) % langs.length];
-    
-    setLanguage(nextLang);
-    this.scene.restart();
-  });
+    langButton.on('pointerdown', () => {
+      const langs = ['ru', 'en', 'tr'];
+      const currentIndex = langs.indexOf(getLanguage());
+      const nextLang = langs[(currentIndex + 1) % langs.length];
+      
+      setLanguage(nextLang);
+      this.scene.restart();
+    });
 
-  // ========================================
-  // === ТЕКСТУРА 1x1 БЕЛЫЙ ПИКСЕЛЬ      ===
-  // ========================================
-  if (!this.textures.exists("px")) {
-    const g = this.make.graphics({ x: 0, y: 0, add: false });
-    g.fillStyle(0xffffff, 1);
-    g.fillRect(0, 0, 1, 1);
-    g.generateTexture("px", 1, 1);
-    g.destroy();
-  }
+    if (!this.textures.exists("px")) {
+      const g = this.make.graphics({ x: 0, y: 0, add: false });
+      g.fillStyle(0xffffff, 1);
+      g.fillRect(0, 0, 1, 1);
+      g.generateTexture("px", 1, 1);
+      g.destroy();
+    }
 
-  // ========================================
-  // === ГРАДИЕНТНОЕ НЕБО                 ===
-  // ========================================
-  const skyGraphics = this.add.graphics();
-  const skySteps = 20;
-  const stepH = (HEIGHT - GROUND_H) / skySteps;
+    const skyGraphics = this.add.graphics();
+    const skySteps = 20;
+    const stepH = (HEIGHT - GROUND_H) / skySteps;
 
-  for (let i = 0; i < skySteps; i++) {
-    const t = i / skySteps;
-    const r = Math.round(100 + t * 75);
-    const g = Math.round(170 + t * 55);
-    const b = Math.round(230 + t * 25);
-    const color = (r << 16) | (g << 8) | b;
+    for (let i = 0; i < skySteps; i++) {
+      const t = i / skySteps;
+      const r = Math.round(100 + t * 75);
+      const g = Math.round(170 + t * 55);
+      const b = Math.round(230 + t * 25);
+      const color = (r << 16) | (g << 8) | b;
 
-    skyGraphics.fillStyle(color, 1);
-    skyGraphics.fillRect(0, i * stepH, WIDTH, stepH + 1);
-  }
-  skyGraphics.setDepth(0);
+      skyGraphics.fillStyle(color, 1);
+      skyGraphics.fillRect(0, i * stepH, WIDTH, stepH + 1);
+    }
+    skyGraphics.setDepth(0);
 
-  // ========================================
-  // === ОБЛАКА                           ===
-  // ========================================
-  this.clouds = [];
-  this.createClouds();
+    this.clouds = [];
+    this.createClouds();
 
-  this.groundTop = HEIGHT - GROUND_H;
+    this.groundTop = HEIGHT - GROUND_H;
 
-  // ========================================
-  // === ЗЕМЛЯ                            ===
-  // ========================================
-  this.add
-    .image(WIDTH / 2, HEIGHT - GROUND_H / 2, "px")
-    .setTint(0x5a4a3a)
-    .setDisplaySize(WIDTH, GROUND_H)
-    .setDepth(5);
-
-  this.add
-    .image(WIDTH / 2, this.groundTop + 4, "px")
-    .setTint(0x4caf50)
-    .setDisplaySize(WIDTH, 8)
-    .setDepth(6);
-
-  this.add
-    .image(WIDTH / 2, this.groundTop + 9, "px")
-    .setTint(0x388e3c)
-    .setDisplaySize(WIDTH, 3)
-    .setDepth(6);
-
-  for (let i = 0; i < 15; i++) {
-    const dx = Phaser.Math.Between(10, WIDTH - 10);
-    const dy = Phaser.Math.Between(this.groundTop + 15, HEIGHT - 10);
     this.add
-      .image(dx, dy, "px")
-      .setTint(0x4a3a2a)
-      .setDisplaySize(
-        Phaser.Math.Between(2, 5),
-        Phaser.Math.Between(2, 4)
-      )
-      .setAlpha(0.4)
+      .image(WIDTH / 2, HEIGHT - GROUND_H / 2, "px")
+      .setTint(0x5a4a3a)
+      .setDisplaySize(WIDTH, GROUND_H)
+      .setDepth(5);
+
+    this.add
+      .image(WIDTH / 2, this.groundTop + 4, "px")
+      .setTint(0x4caf50)
+      .setDisplaySize(WIDTH, 8)
       .setDepth(6);
-  }
 
-  // ========================================
-  // === ИГРОК                            ===
-  // ========================================
-  this.player = this.physics.add.image(90, HEIGHT / 3, "bird");
-  this.player.setDisplaySize(110, 70);
-  this.player.setDepth(10);
-  this.player.body.setAllowGravity(false);
-  this.player.body.setSize(50, 36);
-  this.player.body.setOffset(
-    (this.player.width - this.player.body.width) / 2,
-    (this.player.height - this.player.body.height) / 2
-  );
+    this.add
+      .image(WIDTH / 2, this.groundTop + 9, "px")
+      .setTint(0x388e3c)
+      .setDisplaySize(WIDTH, 3)
+      .setDepth(6);
 
-  this.playerBaseScaleX = this.player.scaleX;
-  this.playerBaseScaleY = this.player.scaleY;
-
-  this.idleTween = this.tweens.add({
-    targets: this.player,
-    y: this.player.y - 15,
-    duration: 600,
-    yoyo: true,
-    repeat: -1,
-    ease: "Sine.easeInOut",
-  });
-
-  this.playerShadow = this.add
-    .image(90, this.groundTop - 5, "px")
-    .setTint(0x000000)
-    .setDisplaySize(40, 8)
-    .setAlpha(0.15)
-    .setDepth(4);
-
-  // ========================================
-  // === МАССИВ МАРКЕРОВ ЗДАНИЙ           ===
-  // ========================================
-  this.pipeMarkers = [];
-
-  // ========================================
-  // === ТЕКСТ СЧЁТА                      ===
-  // ========================================
-  this.scoreText = this.add
-    .text(WIDTH / 2, 40, "0", {
-      fontFamily: "Arial",
-      fontSize: "44px",
-      color: "#ffffff",
-      fontStyle: "bold",
-      stroke: "#2c3e50",
-      strokeThickness: 5,
-      shadow: {
-        offsetX: 2,
-        offsetY: 2,
-        color: "#00000044",
-        blur: 4,
-        fill: true,
-      },
-    })
-    .setOrigin(0.5)
-    .setDepth(100);
-
-  this.bestText = this.add
-    .text(WIDTH / 2, 78, t('best') + ": " + this.bestScore, {
-      fontFamily: "Arial",
-      fontSize: "16px",
-      color: "#ffffffcc",
-      stroke: "#00000066",
-      strokeThickness: 2,
-    })
-    .setOrigin(0.5)
-    .setDepth(100);
-
-  // ========================================
-  // === ПОДСКАЗКА                        ===
-  // ========================================
-  this.hintText = this.add
-    .text(WIDTH / 2, HEIGHT / 2 + 80, t('tapToStart'), {
-      fontFamily: "Arial",
-      fontSize: "22px",
-      color: "#ffffff",
-      stroke: "#000000",
-      strokeThickness: 3,
-    })
-    .setOrigin(0.5)
-    .setDepth(100);
-
-  this.tweens.add({
-    targets: this.hintText,
-    alpha: 0.4,
-    duration: 800,
-    yoyo: true,
-    repeat: -1,
-    ease: "Sine.easeInOut",
-  });
-
-  // ========================================
-  // === ПАНЕЛЬ GAME OVER                 ===
-  // ========================================
-  this.gameOverPanel = this.add
-    .container(WIDTH / 2, HEIGHT / 2)
-    .setDepth(200);
-  this.gameOverPanel.setVisible(false);
-
-  const panelGraphics = this.add.graphics();
-  panelGraphics.fillStyle(0x1a1a2e, 0.85);
-  panelGraphics.fillRoundedRect(-145, -110, 290, 220, 16);
-  panelGraphics.lineStyle(2, 0xffffff, 0.2);
-  panelGraphics.strokeRoundedRect(-145, -110, 290, 220, 16);
-
-  const goTitle = this.add
-    .text(0, -75, t('gameOver'), {
-      fontFamily: "Arial",
-      fontSize: "30px",
-      color: "#ff6b6b",
-      fontStyle: "bold",
-      stroke: "#000000",
-      strokeThickness: 3,
-    })
-    .setOrigin(0.5);
-
-  const divider = this.add.graphics();
-  divider.lineStyle(1, 0xffffff, 0.2);
-  divider.lineBetween(-100, -48, 100, -48);
-
-  this.panelScoreText = this.add
-    .text(0, -25, "", {
-      fontFamily: "Arial",
-      fontSize: "22px",
-      color: "#ffffff",
-      stroke: "#000000",
-      strokeThickness: 2,
-    })
-    .setOrigin(0.5);
-
-  this.panelBestText = this.add
-    .text(0, 10, "", {
-      fontFamily: "Arial",
-      fontSize: "22px",
-      color: "#ffd93d",
-      stroke: "#000000",
-      strokeThickness: 2,
-    })
-    .setOrigin(0.5);
-
-  this.newRecordText = this.add
-    .text(0, 50, "", {
-      fontFamily: "Arial",
-      fontSize: "18px",
-      color: "#ffd93d",
-      fontStyle: "bold",
-      stroke: "#000000",
-      strokeThickness: 2,
-    })
-    .setOrigin(0.5);
-
-  this.gameOverPanel.add([
-    panelGraphics,
-    goTitle,
-    divider,
-    this.panelScoreText,
-    this.panelBestText,
-    this.newRecordText,
-  ]);
-
-  // ========================================
-  // === ОБРАБОТКА НАЖАТИЙ                ===
-  // ========================================
-  this.input.on("pointerdown", this.handleTap, this);
-  this.input.addPointer(2);
-
-  // ========================================
-  // === ПАУЗА ПРИ ПОТЕРЕ ФОКУСА          ===
-  // ========================================
-  this.game.events.on('blur', () => {
-    if (this.state === 'play') {
-      this.scene.pause();
+    for (let i = 0; i < 15; i++) {
+      const dx = Phaser.Math.Between(10, WIDTH - 10);
+      const dy = Phaser.Math.Between(this.groundTop + 15, HEIGHT - 10);
+      this.add
+        .image(dx, dy, "px")
+        .setTint(0x4a3a2a)
+        .setDisplaySize(
+          Phaser.Math.Between(2, 5),
+          Phaser.Math.Between(2, 4)
+        )
+        .setAlpha(0.4)
+        .setDepth(6);
     }
-  });
 
-  this.game.events.on('focus', () => {
-    if (this.scene.isPaused()) {
-      this.scene.resume();
-    }
-  });
+    this.player = this.physics.add.image(90, HEIGHT / 3, "bird");
+    this.player.setDisplaySize(110, 70);
+    this.player.setDepth(10);
+    this.player.body.setAllowGravity(false);
+    this.player.body.setSize(50, 36);
+    this.player.body.setOffset(
+      (this.player.width - this.player.body.width) / 2,
+      (this.player.height - this.player.body.height) / 2
+    );
 
-  // ========================================
-  // === STICKY БАННЕР                    ===
-  // ========================================
-  this.time.delayedCall(1000, () => {
-    showBanner().then((result) => {
-      if (result.stickyAdvIsShowing) {
-        console.log("✅ Баннер активен");
-      } else if (result.reason) {
-        console.log("ℹ️ Баннер не показан:", result.reason);
+    this.playerBaseScaleX = this.player.scaleX;
+    this.playerBaseScaleY = this.player.scaleY;
+
+    this.idleTween = this.tweens.add({
+      targets: this.player,
+      y: this.player.y - 15,
+      duration: 600,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
+
+    this.playerShadow = this.add
+      .image(90, this.groundTop - 5, "px")
+      .setTint(0x000000)
+      .setDisplaySize(40, 8)
+      .setAlpha(0.15)
+      .setDepth(4);
+
+    this.pipeMarkers = [];
+
+    this.scoreText = this.add
+      .text(WIDTH / 2, 40, "0", {
+        fontFamily: "Arial",
+        fontSize: "44px",
+        color: "#ffffff",
+        fontStyle: "bold",
+        stroke: "#2c3e50",
+        strokeThickness: 5,
+        shadow: {
+          offsetX: 2,
+          offsetY: 2,
+          color: "#00000044",
+          blur: 4,
+          fill: true,
+        },
+      })
+      .setOrigin(0.5)
+      .setDepth(100);
+
+    this.bestText = this.add
+      .text(WIDTH / 2, 78, t('best') + ": " + this.bestScore, {
+        fontFamily: "Arial",
+        fontSize: "16px",
+        color: "#ffffffcc",
+        stroke: "#00000066",
+        strokeThickness: 2,
+      })
+      .setOrigin(0.5)
+      .setDepth(100);
+
+    this.hintText = this.add
+      .text(WIDTH / 2, HEIGHT / 2 + 80, t('tapToStart'), {
+        fontFamily: "Arial",
+        fontSize: "22px",
+        color: "#ffffff",
+        stroke: "#000000",
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5)
+      .setDepth(100);
+
+    this.tweens.add({
+      targets: this.hintText,
+      alpha: 0.4,
+      duration: 800,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
+
+    this.gameOverPanel = this.add
+      .container(WIDTH / 2, HEIGHT / 2)
+      .setDepth(200);
+    this.gameOverPanel.setVisible(false);
+
+    const panelGraphics = this.add.graphics();
+    panelGraphics.fillStyle(0x1a1a2e, 0.85);
+    panelGraphics.fillRoundedRect(-145, -130, 290, 260, 16);
+    panelGraphics.lineStyle(2, 0xffffff, 0.2);
+    panelGraphics.strokeRoundedRect(-145, -130, 290, 260, 16);
+
+    const goTitle = this.add
+      .text(0, -95, t('gameOver'), {
+        fontFamily: "Arial",
+        fontSize: "30px",
+        color: "#ff6b6b",
+        fontStyle: "bold",
+        stroke: "#000000",
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5);
+
+    const divider = this.add.graphics();
+    divider.lineStyle(1, 0xffffff, 0.2);
+    divider.lineBetween(-100, -68, 100, -68);
+
+    this.panelScoreText = this.add
+      .text(0, -45, "", {
+        fontFamily: "Arial",
+        fontSize: "22px",
+        color: "#ffffff",
+        stroke: "#000000",
+        strokeThickness: 2,
+      })
+      .setOrigin(0.5);
+
+    this.panelBestText = this.add
+      .text(0, -10, "", {
+        fontFamily: "Arial",
+        fontSize: "22px",
+        color: "#ffd93d",
+        stroke: "#000000",
+        strokeThickness: 2,
+      })
+      .setOrigin(0.5);
+
+    this.newRecordText = this.add
+      .text(0, 25, "", {
+        fontFamily: "Arial",
+        fontSize: "18px",
+        color: "#ffd93d",
+        fontStyle: "bold",
+        stroke: "#000000",
+        strokeThickness: 2,
+      })
+      .setOrigin(0.5);
+
+    // ✅ КНОПКА "Играть снова" — реклама показывается по действию пользователя
+    const restartBtnBg = this.add.graphics();
+    restartBtnBg.fillStyle(0x4caf50, 1);
+    restartBtnBg.fillRoundedRect(-80, 55, 160, 50, 12);
+    restartBtnBg.lineStyle(2, 0x388e3c, 1);
+    restartBtnBg.strokeRoundedRect(-80, 55, 160, 50, 12);
+
+    this.restartBtnText = this.add
+      .text(0, 80, t('playAgain'), {
+        fontFamily: "Arial",
+        fontSize: "20px",
+        color: "#ffffff",
+        fontStyle: "bold",
+        stroke: "#000000",
+        strokeThickness: 2,
+      })
+      .setOrigin(0.5);
+
+    // Интерактивная зона для кнопки
+    const restartHitArea = this.add
+      .rectangle(0, 80, 160, 50, 0x000000, 0)
+      .setInteractive({ useHandCursor: true });
+
+    restartHitArea.on('pointerover', () => {
+      restartBtnBg.clear();
+      restartBtnBg.fillStyle(0x66bb6a, 1);
+      restartBtnBg.fillRoundedRect(-80, 55, 160, 50, 12);
+      restartBtnBg.lineStyle(2, 0x388e3c, 1);
+      restartBtnBg.strokeRoundedRect(-80, 55, 160, 50, 12);
+    });
+
+    restartHitArea.on('pointerout', () => {
+      restartBtnBg.clear();
+      restartBtnBg.fillStyle(0x4caf50, 1);
+      restartBtnBg.fillRoundedRect(-80, 55, 160, 50, 12);
+      restartBtnBg.lineStyle(2, 0x388e3c, 1);
+      restartBtnBg.strokeRoundedRect(-80, 55, 160, 50, 12);
+    });
+
+    restartHitArea.on('pointerdown', () => {
+      this.restartWithAd();
+    });
+
+    this.gameOverPanel.add([
+      panelGraphics,
+      goTitle,
+      divider,
+      this.panelScoreText,
+      this.panelBestText,
+      this.newRecordText,
+      restartBtnBg,
+      this.restartBtnText,
+      restartHitArea,
+    ]);
+
+    this.input.on("pointerdown", this.handleTap, this);
+    this.input.addPointer(2);
+
+    // ✅ Пробел работает во ВСЕХ состояниях
+    this.input.keyboard.on('keydown-SPACE', () => {
+      this.handleSpaceBar();
+    });
+
+    this.game.events.on('blur', () => {
+      if (this.state === 'play') {
+        this.scene.pause();
       }
     });
-  });
 
-  // ========================================
-  // === ОТЛАДКА (ТОЛЬКО В DEV)           ===
-  // ========================================
-  if (import.meta.env.MODE !== "production") {
-    this.setupDebugTools();
+    this.game.events.on('focus', () => {
+      if (this.scene.isPaused()) {
+        this.scene.resume();
+      }
+    });
+
+    this.time.delayedCall(1000, () => {
+      showBanner().then((result) => {
+        if (result.stickyAdvIsShowing) {
+          console.log("✅ Баннер активен");
+        } else if (result.reason) {
+          console.log("ℹ️ Баннер не показан:", result.reason);
+        }
+      });
+    });
+
+    if (import.meta.env.MODE !== "production") {
+      this.setupDebugTools();
+    }
   }
-}
 
-  // ========================================
-  // === ОТЛАДОЧНЫЕ ИНСТРУМЕНТЫ           ===
-  // ========================================
-  // Метод setupDebugTools ПОСЛЕ create(), но ВНУТРИ класса GameScene
   setupDebugTools() {
     window.__scene = this;
     window.bot = { enabled: false };
@@ -438,38 +508,31 @@ class GameScene extends Phaser.Scene {
         for (let i = 0; i < n; i++) this.addScore();
         console.log(`+${n} очков, всего: ${this.score}`);
       },
-
       setScore: (n) => {
         this.score = n;
         this.scoreText.setText(String(n));
         console.log(`Счёт: ${n}`);
       },
-
       die: () => {
         this.die();
         console.log("💀 Смерть");
       },
-
       speed: (v) => {
         this.scrollSpeed = v;
         console.log(`Скорость: ${v}`);
       },
-
       gap: (v) => {
         this.pipeGap = v;
         console.log(`Щель: ${v}`);
       },
-
       pause: () => {
         this.scene.pause();
         console.log("⏸️ Пауза");
       },
-
       resume: () => {
         this.scene.resume();
         console.log("▶️ Продолжить");
       },
-
       debug: (on = true) => {
         if (on) {
           if (!this.physics.world.debugGraphic) {
@@ -486,26 +549,21 @@ class GameScene extends Phaser.Scene {
         }
         console.log(`🔍 Debug: ${on}`);
       },
-
       tp: (x, y) => {
         this.player.setPosition(x, y);
         console.log(`Телепорт: ${x}, ${y}`);
       },
-
       resetBest: () => {
         this.saveBestScore(0);
         this.bestScore = 0;
-        this.bestText.setText("Рекорд: 0");
+        this.bestText.setText(t('best') + ": 0");
         console.log("🗑️ Рекорд сброшен");
       },
-
       bot: (on = true) => {
         window.bot.enabled = on;
         console.log(on ? "🤖 Бот ON" : "🤖 Бот OFF");
       },
     };
-
-    
   }
 
   createClouds() {
@@ -529,9 +587,93 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // ✅ Обработка пробела — работает во всех состояниях
+  handleSpaceBar() {
+    if (this.state === "idle") {
+      this.startGame();
+    } else if (this.state === "play") {
+      this.handleJump();
+    } else if (this.state === "gameover") {
+      this.restartWithAd();
+    }
+  }
+
+  handleJump() {
+    if (this.state === "idle") {
+      this.startGame();
+    } else if (this.state === "play") {
+      this.player.body.setVelocityY(-330);
+
+      const bx = this.playerBaseScaleX;
+      const by = this.playerBaseScaleY;
+      this.player.setScale(bx, by);
+
+      this.tweens.add({
+        targets: this.player,
+        scaleX: bx * 1.1,
+        scaleY: by * 0.9,
+        duration: 80,
+        yoyo: true,
+        ease: "Quad.easeOut",
+        onComplete: () => {
+          this.player.setScale(bx, by);
+        },
+      });
+    }
+  }
+
   handleTap() {
-  // --- Состояние "ожидание" → начинаем игру ---
-  if (this.state === "idle") {
+    if (this.state === "idle") {
+      this.startGame();
+      return;
+    }
+
+    if (this.state === "play") {
+      this.handleJump();
+      return;
+    }
+
+    // ✅ При gameover — тап НЕ перезапускает напрямую
+    // Перезапуск только через кнопку "Играть снова" или пробел
+    // Это предотвращает случайный показ рекламы
+  }
+
+  // ✅ Рестарт с рекламой — вызывается ТОЛЬКО по явному действию пользователя
+  restartWithAd() {
+    if (this.state !== "gameover") return;
+
+    const now = Date.now();
+    const timeSinceLastAd = now - window.lastAdTime;
+    const minAdInterval = 60000;
+
+    if (timeSinceLastAd > minAdInterval) {
+      window.lastAdTime = now;
+
+      showFullscreenAd(
+        () => {
+          console.log("📺 Реклама открыта");
+        },
+        (wasShown) => {
+          if (wasShown) {
+            console.log("✅ Реклама показана");
+          }
+          showBanner();
+          this.scene.restart();
+        },
+        (error) => {
+          console.warn("⚠️ Ошибка рекламы:", error);
+          showBanner();
+          this.scene.restart();
+        }
+      );
+    } else {
+      console.log(`⏳ До следующей рекламы: ${Math.ceil((minAdInterval - timeSinceLastAd) / 1000)} сек`);
+      showBanner();
+      this.scene.restart();
+    }
+  }
+
+  startGame() {
     this.state = "play";
 
     if (this.idleTween) {
@@ -547,40 +689,7 @@ class GameScene extends Phaser.Scene {
     this.time.delayedCall(1200, () => {
       if (this.state === "play") this.startSpawning();
     });
-    return;
   }
-
-  // --- Состояние "играем" → прыжок ---
-  if (this.state === "play") {
-    this.player.body.setVelocityY(-330);
-
-    const bx = this.playerBaseScaleX;
-    const by = this.playerBaseScaleY;
-    this.player.setScale(bx, by);
-
-    this.tweens.add({
-      targets: this.player,
-      scaleX: bx * 1.1,
-      scaleY: by * 0.9,
-      duration: 80,
-      yoyo: true,
-      ease: "Quad.easeOut",
-      onComplete: () => {
-        this.player.setScale(bx, by);
-      },
-    });
-    return;
-  }
-
-  // --- Состояние "проиграли" → перезапуск ---
-  if (this.state === "gameover") {
-    // ДОБАВЛЕНО: Показываем баннер обратно при перезапуске
-    showBanner();
-    
-    // Перезапускаем сцену
-    this.scene.restart();
-  }
-}
 
   startSpawning() {
     if (this.spawnTimer) this.spawnTimer.remove(false);
@@ -625,7 +734,6 @@ class GameScene extends Phaser.Scene {
     const darkerColor = Phaser.Display.Color.ValueToColor(color).darken(15)
       .color;
 
-    // Верхнее здание
     const topH = Math.max(10, gapTopY);
     const topBody = this.add.image(x, topH / 2, "px");
     topBody.setTint(color);
@@ -649,7 +757,6 @@ class GameScene extends Phaser.Scene {
       parts: topGroup,
     };
 
-    // Нижнее здание
     const bottomH = Math.max(10, this.groundTop - gapBottomY);
     const botBody = this.add.image(x, gapBottomY + bottomH / 2, "px");
     botBody.setTint(color);
@@ -706,130 +813,73 @@ class GameScene extends Phaser.Scene {
     return windows;
   }
 
- die() {
-  if (this.state === "gameover") return;
-  this.state = "gameover";
+  die() {
+    if (this.state === "gameover") return;
+    this.state = "gameover";
 
-  if (this.idleTween) {
-    this.idleTween.stop();
-    this.idleTween = null;
-  }
-
-  this.player.setScale(this.playerBaseScaleX, this.playerBaseScaleY);
-  this.player.body.setVelocity(0, 0);
-  this.player.body.setAllowGravity(false);
-
-  if (this.spawnTimer) this.spawnTimer.remove(false);
-
-  this.cameras.main.flash(200, 255, 100, 100);
-  this.cameras.main.shake(300, 0.015);
-
-  let isNewRecord = false;
-  if (this.score > this.bestScore) {
-    this.bestScore = this.score;
-    this.saveBestScore(this.bestScore);
-    isNewRecord = true;
-
-    // Отправляем в лидерборд
-    submitScore(this.bestScore);
-  }
-
-  this.bestText.setText(t('best') + ": " + this.bestScore);
-  this.scoreText.setVisible(false);
-
-  this.panelScoreText.setText(t('yourScore') + ": " + this.score);
-  this.panelBestText.setText(t('bestScore') + ": " + this.bestScore);
-  this.newRecordText.setText(t('newRecord'));
-  this.newRecordText.setVisible(isNewRecord);
-
-  this.gameOverPanel.setVisible(true);
-  this.gameOverPanel.setAlpha(0);
-  this.tweens.add({
-    targets: this.gameOverPanel,
-    alpha: 1,
-    duration: 400,
-    ease: "Quad.easeOut",
-  });
-
-  if (isNewRecord) {
-    this.tweens.add({
-      targets: this.newRecordText,
-      scaleX: 1.15,
-      scaleY: 1.15,
-      duration: 500,
-      yoyo: true,
-      repeat: -1,
-      ease: "Sine.easeInOut",
-    });
-  }
-
-  // Безопасно удаляем старый текст
-  if (this.hintText) {
-    this.hintText.destroy();
-    this.hintText = null;
-  }
-
-  // Создаём новый текст подсказки
-  this.hintText = this.add.text(
-    WIDTH / 2,
-    HEIGHT / 2 + 80,
-    t('tapToRestart'),
-    {
-      fontFamily: "Arial",
-      fontSize: "22px",
-      color: "#ffd93d",
-      stroke: "#000000",
-      strokeThickness: 3,
-      padding: { x: 10, y: 5 },
+    if (this.idleTween) {
+      this.idleTween.stop();
+      this.idleTween = null;
     }
-  );
 
-  this.hintText.setOrigin(0.5);
-  this.hintText.setDepth(201);
-  this.hintText.setVisible(true);
-  this.hintText.setAlpha(1);
+    this.player.setScale(this.playerBaseScaleX, this.playerBaseScaleY);
+    this.player.body.setVelocity(0, 0);
+    this.player.body.setAllowGravity(false);
 
-  // Анимация мигания
-  this.tweens.add({
-    targets: this.hintText,
-    alpha: 0.4,
-    duration: 800,
-    yoyo: true,
-    repeat: -1,
-    ease: "Sine.easeInOut",
-  });
+    if (this.spawnTimer) this.spawnTimer.remove(false);
 
-  // ДОБАВЛЕНО: Скрываем баннер при Game Over
-  hideBanner();
+    this.cameras.main.flash(200, 255, 100, 100);
+    this.cameras.main.shake(300, 0.015);
 
-  // Показываем рекламу каждую 3-ю смерть
-  this.deathCount = (this.deathCount || 0) + 1;
+    let isNewRecord = false;
+    if (this.score > this.bestScore) {
+      this.bestScore = this.score;
+      this.saveBestScore(this.bestScore);
+      isNewRecord = true;
+      submitScore(this.bestScore);
+    }
 
-  if (this.deathCount % 3 === 0) {
-    showFullscreenAd(
-      () => {
-        // onOpen — пауза
-        this.scene.pause();
-      },
-      (wasShown) => {
-        // onClose — продолжить
-        this.scene.resume();
-        
-        // Логирование
-        if (wasShown) {
-          console.log("✅ Реклама была показана");
-        } else {
-          console.log("⚠️ Реклама не показалась (слишком частый вызов)");
-        }
-      },
-      (error) => {
-        // onError — обработка ошибки
-        console.warn("⚠️ Реклама не показана:", error);
-        this.scene.resume();
-      }
-    );
+    this.bestText.setText(t('best') + ": " + this.bestScore);
+    this.scoreText.setVisible(false);
+
+    this.panelScoreText.setText(t('yourScore') + ": " + this.score);
+    this.panelBestText.setText(t('bestScore') + ": " + this.bestScore);
+    this.newRecordText.setText(t('newRecord'));
+    this.newRecordText.setVisible(isNewRecord);
+
+    // ✅ Обновляем текст кнопки на текущем языке
+    if (this.restartBtnText) {
+      this.restartBtnText.setText(t('playAgain'));
+    }
+
+    this.gameOverPanel.setVisible(true);
+    this.gameOverPanel.setAlpha(0);
+    this.tweens.add({
+      targets: this.gameOverPanel,
+      alpha: 1,
+      duration: 400,
+      ease: "Quad.easeOut",
+    });
+
+    if (isNewRecord) {
+      this.tweens.add({
+        targets: this.newRecordText,
+        scaleX: 1.15,
+        scaleY: 1.15,
+        duration: 500,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut",
+      });
+    }
+
+    if (this.hintText) {
+      this.hintText.destroy();
+      this.hintText = null;
+    }
+
+    hideBanner();
   }
-}
 
   addScore() {
     this.score += 1;
@@ -870,7 +920,6 @@ class GameScene extends Phaser.Scene {
   update(time, delta) {
     if (!this.player || !this.player.body) return;
 
-    // Облака двигаются всегда
     for (const cloud of this.clouds) {
       cloud.x -= cloud.cloudSpeed * (delta / 1000);
       if (cloud.x < -60) {
@@ -879,7 +928,6 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // Тень под птичкой
     if (this.playerShadow) {
       this.playerShadow.x = this.player.x;
       const dist = this.groundTop - this.player.y;
@@ -891,7 +939,6 @@ class GameScene extends Phaser.Scene {
     if (this.state === "idle") return;
     if (this.state === "gameover") return;
 
-    // Автоплей бот (только в dev-режиме)
     if (
       import.meta.env.MODE !== "production" &&
       window.bot?.enabled &&
@@ -920,23 +967,19 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // Наклон птички
     const vy = this.player.body.velocity.y;
     this.player.rotation = Phaser.Math.Clamp(vy / 600, -0.5, 0.8);
 
-    // Ограничение сверху
     if (this.player.y < 0) {
       this.player.y = 0;
       this.player.body.setVelocityY(0);
     }
 
-    // Столкновение с землёй
     if (this.player.body.bottom >= this.groundTop) {
       this.die();
       return;
     }
 
-    // Движение зданий
     const speed = this.scrollSpeed * (delta / 1000);
     const px = this.player.body.center.x;
     const py = this.player.body.center.y;
@@ -988,17 +1031,13 @@ class GameScene extends Phaser.Scene {
 // ========================================
 // === ЗАПУСК ИГРЫ                      ===
 // ========================================
-// В конце файла src/main.js
-
 async function startGame() {
   let sdkLanguage = null;
   
   try {
-    // Инициализируем SDK
     const sdk = await initYSDK();
     
     if (sdk) {
-      // Получаем язык из SDK
       sdkLanguage = getSDKLanguage();
       console.log("🌍 Язык из Яндекс SDK:", sdkLanguage);
     }
@@ -1006,10 +1045,9 @@ async function startGame() {
     console.warn("⚠️ SDK недоступен, продолжаем без него:", e);
   }
 
-  // Загружаем язык (с приоритетом SDK)
   loadSavedLanguage(sdkLanguage);
 
-  new Phaser.Game({
+  const game = new Phaser.Game({
     type: Phaser.AUTO,
     width: WIDTH,
     height: HEIGHT,
@@ -1023,11 +1061,70 @@ async function startGame() {
     },
     scene: [LanguageScene, BootScene, GameScene],
     scale: {
-      mode: Phaser.Scale.FIT,
-      autoCenter: Phaser.Scale.CENTER_BOTH,
+      mode: Phaser.Scale.NONE,
+      autoCenter: Phaser.Scale.NO_CENTER,
+      width: WIDTH,
+      height: HEIGHT,
     },
     backgroundColor: "#64aff0",
   });
+
+  // ========================================
+  // === АДАПТИВНОЕ МАСШТАБИРОВАНИЕ       ===
+  // ========================================
+  function resizeGame() {
+    const canvas = document.querySelector('#app canvas');
+    if (!canvas) return;
+
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    const isPortrait = windowHeight >= windowWidth;
+
+    let scale;
+
+    if (isPortrait) {
+      const scaleByWidth = windowWidth / WIDTH;
+      const scaleByHeight = windowHeight / HEIGHT;
+      
+      if (scaleByWidth * HEIGHT <= windowHeight) {
+        scale = scaleByWidth;
+      } else {
+        scale = scaleByHeight;
+      }
+    } else {
+      scale = windowHeight / HEIGHT;
+    }
+
+    const canvasWidth = Math.floor(WIDTH * scale);
+    const canvasHeight = Math.floor(HEIGHT * scale);
+
+    canvas.style.width = canvasWidth + 'px';
+    canvas.style.height = canvasHeight + 'px';
+    canvas.style.position = 'absolute';
+    canvas.style.left = Math.floor((windowWidth - canvasWidth) / 2) + 'px';
+    canvas.style.top = Math.floor((windowHeight - canvasHeight) / 2) + 'px';
+  }
+
+  window.addEventListener('resize', resizeGame);
+  window.addEventListener('orientationchange', () => {
+    setTimeout(resizeGame, 50);
+    setTimeout(resizeGame, 200);
+    setTimeout(resizeGame, 500);
+  });
+
+  function waitForCanvas() {
+    const canvas = document.querySelector('#app canvas');
+    if (canvas) {
+      resizeGame();
+    } else {
+      requestAnimationFrame(waitForCanvas);
+    }
+  }
+  waitForCanvas();
+
+  setTimeout(resizeGame, 100);
+  setTimeout(resizeGame, 300);
+  setTimeout(resizeGame, 1000);
 }
 
 startGame();

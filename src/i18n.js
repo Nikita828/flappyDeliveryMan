@@ -1,69 +1,77 @@
 // src/i18n.js
 
+// src/i18n.js
 export const translations = {
   ru: {
-    selectLanguage: "Выберите язык",
-    tapToStart: "Нажми чтобы начать",
-    score: "Счёт",
-    best: "Рекорд",
-    gameOver: "КОНЕЦ ИГРЫ",
-    yourScore: "Счёт",
-    bestScore: "Рекорд",
-    newRecord: "⭐ НОВЫЙ РЕКОРД! ⭐",
-    tapToRestart: "Нажми для перезапуска",
     loading: "Загрузка",
+    tapToStart: "Нажмите чтобы начать",
+    tapToRestart: "Нажмите чтобы начать заново",
+    gameOver: "Игра окончена",
+    best: "Лучший",
+    yourScore: "Ваш счёт",
+    bestScore: "Лучший счёт",
+    newRecord: "🎉 Новый рекорд!",
+    playAgain: "▶ Ещё раз",          // ✅ НОВЫЙ КЛЮЧ
   },
-  
   en: {
-    selectLanguage: "Select Language",
-    tapToStart: "Tap to start",
-    score: "Score",
-    best: "Best",
-    gameOver: "GAME OVER",
-    yourScore: "Score",
-    bestScore: "Best",
-    newRecord: "⭐ NEW RECORD! ⭐",
-    tapToRestart: "Tap to restart",
     loading: "Loading",
+    tapToStart: "Tap to start",
+    tapToRestart: "Tap to restart",
+    gameOver: "Game Over",
+    best: "Best",
+    yourScore: "Your score",
+    bestScore: "Best score",
+    newRecord: "🎉 New record!",
+    playAgain: "▶ Play Again",        // ✅ НОВЫЙ КЛЮЧ
   },
-  
   tr: {
-    selectLanguage: "Dil Seçin",
-    tapToStart: "Başlamak için dokun",
-    score: "Puan",
-    best: "En İyi",
-    gameOver: "OYUN BİTTİ",
-    yourScore: "Puan",
-    bestScore: "En İyi",
-    newRecord: "⭐ YENİ REKOR! ⭐",
-    tapToRestart: "Yeniden başlamak için dokun",
     loading: "Yükleniyor",
-  }
+    tapToStart: "Başlamak için dokun",
+    tapToRestart: "Yeniden başlamak için dokun",
+    gameOver: "Oyun Bitti",
+    best: "En iyi",
+    yourScore: "Skorunuz",
+    bestScore: "En iyi skor",
+    newRecord: "🎉 Yeni rekor!",
+    playAgain: "▶ Tekrar Oyna",       // ✅ НОВЫЙ КЛЮЧ
+  },
 };
 
 let currentLanguage = 'ru';
 
+/**
+ * Получить перевод по ключу
+ */
 export function t(key) {
-  return translations[currentLanguage][key] || key;
+  return translations[currentLanguage]?.[key] || key;
 }
 
+/**
+ * Установить язык
+ */
 export function setLanguage(lang) {
   if (translations[lang]) {
     currentLanguage = lang;
     try {
       localStorage.setItem('game-language', lang);
+      console.log("✅ Язык сохранён:", lang);
     } catch (e) {
-      console.warn('Не удалось сохранить язык');
+      console.warn('⚠️ Не удалось сохранить язык:', e);
     }
+  } else {
+    console.warn('⚠️ Неизвестный язык:', lang);
   }
 }
 
+/**
+ * Получить текущий язык
+ */
 export function getLanguage() {
   return currentLanguage;
 }
 
 /**
- * ОБНОВЛЕНО: Загрузить язык с приоритетом SDK
+ * Загрузить язык с приоритетом SDK
  */
 export function loadSavedLanguage(sdkLanguage = null) {
   // 1. ПРИОРИТЕТ: Язык из Яндекс SDK
@@ -82,7 +90,7 @@ export function loadSavedLanguage(sdkLanguage = null) {
       return saved;
     }
   } catch (e) {
-    console.warn('Не удалось загрузить сохранённый язык');
+    console.warn('⚠️ Не удалось загрузить сохранённый язык:', e);
   }
   
   // 3. Язык браузера
@@ -95,5 +103,20 @@ export function loadSavedLanguage(sdkLanguage = null) {
   
   // 4. По умолчанию русский
   console.log("🇷🇺 Используем русский по умолчанию");
+  currentLanguage = 'ru';
   return 'ru';
+}
+
+/**
+ * Получить список доступных языков
+ */
+export function getAvailableLanguages() {
+  return Object.keys(translations);
+}
+
+/**
+ * Проверить, существует ли перевод
+ */
+export function hasTranslation(key) {
+  return currentLanguage in translations && key in translations[currentLanguage];
 }

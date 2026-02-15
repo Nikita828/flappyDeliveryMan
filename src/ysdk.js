@@ -1,22 +1,66 @@
-// src/ysdk.js - ПОЛНАЯ ВЕРСИЯ
+// src/ysdk.js
 
 let ysdk = null;
+let isLocalDev = false;
+let gameReadyCalled = false;  // ✅ Защита от повторного вызова
 
 /**
  * Инициализация Яндекс SDK
+ * НЕ вызываем gameReady здесь — только после загрузки ресурсов!
  */
 export async function initYSDK() {
   if (typeof YaGames === "undefined") {
+    console.warn("⚠️ YaGames недоступен (локальная разработка)");
+    isLocalDev = true;
     return null;
   }
 
   try {
     ysdk = await YaGames.init();
     console.log("✅ Яндекс SDK инициализирован");
+    
+    isLocalDev = window.self === window.top;
+    
+    if (isLocalDev) {
+      console.warn("⚠️ Игра запущена локально, SDK работает в режиме эмуляции");
+    }
+    
+    // ❌ НЕ вызываем gameReady здесь!
+    // Он будет вызван из BootScene.create() после загрузки ресурсов
+    
     return ysdk;
   } catch (error) {
     console.error("❌ Ошибка инициализации SDK:", error);
+    isLocalDev = true;
     return null;
+  }
+}
+
+/**
+ * ✅ Game Ready API — вызывать ПОСЛЕ загрузки всех ресурсов
+ */
+export function gameReady() {
+  if (gameReadyCalled) {
+    console.log("ℹ️ gameReady() уже был вызван");
+    return;
+  }
+  
+  gameReadyCalled = true;
+  
+  if (!ysdk || isLocalDev) {
+    console.log("🎮 [DEV] Game Ready (эмуляция)");
+    return;
+  }
+
+  try {
+    if (ysdk.features?.LoadingAPI?.ready) {
+      ysdk.features.LoadingAPI.ready();
+      console.log("✅ Game Ready API: LoadingAPI.ready() вызван");
+    } else {
+      console.warn("⚠️ LoadingAPI.ready() недоступен");
+    }
+  } catch (error) {
+    console.warn("⚠️ Ошибка вызова gameReady:", error);
   }
 }
 
@@ -24,7 +68,7 @@ export async function initYSDK() {
  * Получить язык из SDK
  */
 export function getSDKLanguage() {
-  if (!ysdk) {
+  if (!ysdk || isLocalDev) {
     return null;
   }
 
@@ -42,8 +86,15 @@ export function getSDKLanguage() {
  * Показ полноэкранной рекламы
  */
 export function showFullscreenAd(onOpen, onClose, onError) {
-  if (!ysdk || !ysdk.adv) {
-    if (onError) onError("SDK недоступен");
+  if (!ysdk || isLocalDev) {
+    console.log("🎬 [DEV] Эмуляция полноэкранной рекламы");
+    
+    if (onOpen) onOpen();
+    
+    setTimeout(() => {
+      if (onClose) onClose(false);
+    }, 1000);
+    
     return;
   }
 
@@ -69,8 +120,8 @@ export function showFullscreenAd(onOpen, onClose, onError) {
  * Показать sticky баннер
  */
 export function showBanner() {
-  if (!ysdk || !ysdk.adv) {
-    console.warn("⚠️ SDK недоступен для показа баннера");
+  if (!ysdk || isLocalDev) {
+    console.log("📱 [DEV] Эмуляция показа баннера");
     return Promise.resolve({ stickyAdvIsShowing: false });
   }
 
@@ -84,7 +135,9 @@ export function showBanner() {
       return result;
     })
     .catch((error) => {
-      console.warn("⚠️ Ошибка показа баннера:", error);
+      if (!error.message?.includes("No parent")) {
+        console.warn("⚠️ Ошибка показа баннера:", error);
+      }
       return { stickyAdvIsShowing: false };
     });
 }
@@ -93,7 +146,8 @@ export function showBanner() {
  * Скрыть sticky баннер
  */
 export function hideBanner() {
-  if (!ysdk || !ysdk.adv) {
+  if (!ysdk || isLocalDev) {
+    console.log("📱 [DEV] Эмуляция скрытия баннера");
     return Promise.resolve({ stickyAdvIsShowing: false });
   }
 
@@ -103,7 +157,9 @@ export function hideBanner() {
       return result;
     })
     .catch((error) => {
-      console.warn("⚠️ Ошибка скрытия баннера:", error);
+      if (!error.message?.includes("No parent")) {
+        console.warn("⚠️ Ошибка скрытия баннера:", error);
+      }
       return { stickyAdvIsShowing: false };
     });
 }
@@ -112,7 +168,7 @@ export function hideBanner() {
  * Проверить статус баннера
  */
 export function getBannerStatus() {
-  if (!ysdk || !ysdk.adv) {
+  if (!ysdk || isLocalDev) {
     return Promise.resolve({ stickyAdvIsShowing: false });
   }
 
@@ -122,7 +178,9 @@ export function getBannerStatus() {
       return result;
     })
     .catch((error) => {
-      console.warn("⚠️ Ошибка получения статуса баннера:", error);
+      if (!error.message?.includes("No parent")) {
+        console.warn("⚠️ Ошибка получения статуса баннера:", error);
+      }
       return { stickyAdvIsShowing: false };
     });
 }
@@ -131,7 +189,13 @@ export function getBannerStatus() {
  * Отправка результата в лидерборд
  */
 export function submitScore(score) {
-  if (!ysdk || !ysdk.getLeaderboards) {
+  if (!ysdk || isLocalDev) {
+    console.log("🏆 [DEV] Эмуляция отправки результата:", score);
+    return;
+  }
+
+  if (!ysdk.getLeaderboards) {
+    console.warn("⚠️ Лидерборды недоступны");
     return;
   }
 
@@ -146,4 +210,11 @@ export function submitScore(score) {
     .catch((error) => {
       console.warn("⚠️ Ошибка отправки результата:", error);
     });
+}
+
+/**
+ * Проверка, запущена ли игра локально
+ */
+export function isLocalDevelopment() {
+  return isLocalDev;
 }
